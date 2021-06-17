@@ -1,0 +1,11 @@
+LD_PRELOAD=/usr/local/lib/libprofiler.so CPUPROFILE=Lab4.prof ./Lab4
+pprof -web ./Lab4 Lab4.prof
+
+valgrind --tool=callgrind ./Lab4
+kcachegrind
+
+gprof ./Lab4 gmon.out > gmon.txt
+
+./cmw-cmx-control -n shotComponent
+./cmw-cmx-dump -n shotComponent
+./cmw-cmx-reader -n shotComponent
