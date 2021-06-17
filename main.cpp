@@ -2,13 +2,14 @@
 #include <thread>
 #include <cmath>
 #include <vector>
+#include <fstream>
 
 #include "cmw-cmx-cpp/ProcessComponent.h"
 #include "cmw-cmx-cpp/Component.h"
-#include "cmw-cmx/common.h"
 
 
-static const double R = 10;
+static const double R = 50;
+static double averageInterval = 0.0;
 
 class mBeanClass
 {
@@ -23,7 +24,6 @@ public:
 				  _successPercent(_shotCmp->newFloat64("successPercent")),
 				  _averageInterval(_shotCmp->newFloat64("averageInterval"))
 	{
-		cmw::cmx::ProcessComponent::update();
 		_shotCount = 0;
 		_failShotCount = 0;
 		_successShotCount = 0;
@@ -38,8 +38,7 @@ public:
 	void mBeanCheck(const std::pair<double, double> &shot)
 	{
 		_shotCount = _shotCount+1;
-		_shots.push_back(shot);
-
+		_averageInterval = averageInterval;
 		if(pow(shot.first*shot.first+shot.second*shot.second, 0.5) <= R)
 		{
 			_successShotCount = _successShotCount+1;
@@ -57,7 +56,6 @@ public:
 		checkShotInAria(shot);
 		checkByFive();
 		findSuccessPercent();
-		findAverageInterval();
 	}
 
 private:
@@ -82,18 +80,6 @@ private:
 		_successPercent = float(_successShotCount)/float(_shotCount);
 	};
 
-	void findAverageInterval()
-	{
-		int intervalsCount = 0;
-		for(int i = 0; i < _shots.size()-1; ++i)
-			for(int j = i+1; j < _shots.size(); ++j )
-			{
-				double interval = pow(pow((_shots[i].first-_shots[j].first), 2)+pow((_shots[i].second-_shots[j].second), 2), 0.5);
-				_averageInterval = (_averageInterval*int(intervalsCount) + interval)/double(intervalsCount + 1);
-				++intervalsCount;
-			}
-	}
-
 private:
 	cmw::cmx::ComponentPtr _shotCmp;
 	cmw::cmx::CmxInt64     _shotCount;
@@ -106,39 +92,79 @@ private:
 	cmw::cmx::CmxFloat64   _averageInterval;
 
 	int _countFails;
-	unsigned long long _lastShotTime;
+};
 
-	std::vector<std::pair<double, double>> _shots;
+class SomeClass
+{
+public:
+	explicit SomeClass(std::vector<std::pair<double, double>> &shotsVector): shotsVector(shotsVector){};
+
+	static void checkShot(const std::pair<double, double> &shot)
+	{
+		if(pow(shot.first*shot.first+shot.second*shot.second, 0.5) <= R)
+			std::cout << "Попадание!" << std::endl;
+		else
+			std::cout << "Промах!" << std::endl;
+	}
+
+	void findAverageInterval(const std::pair<double, double> &shot)
+	{
+		for(const auto & i : shotsVector)
+		{
+			double interval = countInterval(i.first, i.second, shot.first, shot.second);
+			averageInterval = countAverageInterval(interval);
+		}
+	}
+
+private:
+	double countInterval(double x1, double y1, double x2, double y2)
+	{
+		return pow(pow((x1 - x2), 2)+pow((y1 - y2), 2), 0.5);
+	}
+
+	double countAverageInterval(double interval)
+	{
+		return (averageInterval*int(intervalsCount) + interval)/double(++intervalsCount);
+	}
+
+private:
+	int intervalsCount = 0;
+	std::vector<std::pair<double, double>> &shotsVector;
 };
 
 
-void checkShot(const std::pair<double, double> &shot)
-{
-	if(pow(shot.first*shot.first+shot.second*shot.second, 0.5) <= R)
-		std::cout << "Попадание!" << std::endl;
-	else
-		std::cout << "Промах!" << std::endl;
-}
+
 
 int main()
 {
+	cmw::cmx::ProcessComponent::update();
 	mBeanClass mBean;
+	std::vector<std::pair<double, double>> shotsVector;
+	SomeClass someClass(shotsVector);
 
 	bool isAlive = true;
-	std::thread([&isAlive]()
+	std::thread thread2([&isAlive]()
 	{
-		sleep(120);
+		sleep(20);
 		isAlive = false;
-	}).detach();
+	});
+	thread2.detach();
+
+	std::ifstream in("../test.txt");
+	std::cin.rdbuf(in.rdbuf());
+
 
 	std::pair<double, double> shot;
 	while(isAlive)
 	{
-		std::cout << "Совершите выстрел:" << std::endl;
+//		std::cout << std::endl;
+//		std::cout << "Совершите выстрел:" << std::endl;
 		std::cin >> shot.first >> shot.second;
-		checkShot(shot);
-		std::cout << std::endl;
+		SomeClass::checkShot(shot);
+		someClass.findAverageInterval(shot);
+		shotsVector.push_back(shot);
 		mBean.mBeanCheck(shot);
+		usleep(100000);
 	}
 
 	return 0;
